@@ -67,14 +67,13 @@ def blobStats(filteredBlobSizes):
     sizes = list(filteredBlobSizes.values())
 
     if not sizes:
-        print("No blobs found.")
-        return
+        mean_size = 0
+        median_size = 0
+    else:
+        mean_size = np.mean(sizes)
+        median_size = np.median(sizes)
 
-    mean_size = np.mean(sizes)
-    median_size = np.median(sizes)
-
-    print(f"Mean Blob Size: {mean_size:.2f} pixels")
-    print(f"Median Blob Size: {median_size} pixels")
+    return mean_size, median_size
     #print blob id with stats
     #add range in both x and y directions
     #think of other stats to report
@@ -100,7 +99,16 @@ def visualizeBlobs(thresholdedImage, blobSizes, minBlobSize, imageArray):
     # Display the visualized image
     Image.fromarray(visualizedImage).show()
 
-def process_image(image_path, threshold, minBlobSize):
+def export(data, filename):
+    if os.path.exists(filename):
+        existing_data = pd.read_excel(filename)
+        all_data = pd.concat([existing_data, pd.DataFrame(data)], ignore_index=True)
+        all_data.to_excel(filename, index=False)
+    else:
+        df = pd.DataFrame(data)
+        df.to_excel(filename, index=False)
+
+def process_image(image_path, threshold, minBlobSize, output_file):
     image = Image.open(image_path)
     imageArray = np.array(image)
 
@@ -108,27 +116,36 @@ def process_image(image_path, threshold, minBlobSize):
 
     blobDict, largestBlobSize, largestBlobID = countBlobs(thresholdedImage, minBlobSize)
 
-    print(f"Statistic for image: {image_path}")
-    blobStats(blobDict)
-    print(f"The largest blob has {largestBlobSize} pixels at ID:{largestBlobID}.")
-    print(f"There are {len(blobDict)} blobs.")
+    mean_size, median_size = blobStats(blobDict)
 
-    visualizeBlobs(thresholdedImage, blobDict, minBlobSize, imageArray)
+    data = {
+        "Image Path": [image_path],
+        "Threshold": [threshold],
+        "Minimum Blob Size": [minBlobSize],
+        "Median Blob Size": [median_size],
+        "Mean Blob Size": [mean_size],
+        "Largest Blob Size": [largestBlobSize],
+        "Largest Blob ID": [largestBlobID],
+        "Number of Blobs": [len(blobDict)]
+    }
 
-def process_directory(directory, threshold, minBlobSize):
+    export(data, "output.xlsx")
+
+def process_directory(directory, threshold, minBlobSize, output_file):
     for root, dirs, files in os.walk(directory):
         for file in files:
             if file.endswith(".tif"):
                 image_path = os.path.join(root, file)
-                process_image(image_path, threshold, minBlobSize)
+                process_image(image_path, threshold, minBlobSize, output_file)
 
 def main():
     #directory = "/Users/hannahpfersch/Library/CloudStorage/OneDrive-QuinnipiacUniversity/Pfersch Black Ind Study SP24"
     directory = "/Users/hannahpfersch/Documents/College/Senior/SP24/AutomatedCellCounter/venv/lib"
     threshold = int(input("What is the green threshold for neurons (0-255)?: " ))
     minBlobSize = int(input("Enter the minimum blob size: "))
+    output_file = "output.xlsx"
 
-    process_directory(directory, threshold, minBlobSize)
+    process_directory(directory, threshold, minBlobSize, output_file)
 
 if __name__ == "__main__":
     main()
