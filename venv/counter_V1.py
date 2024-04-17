@@ -27,15 +27,14 @@ def largestBlob(blobSizes):
 # Counts number of green blobs (sections marked True in visited array)
 def countBlobs(thresholdedImage, minBlobSize):
     blobID = 1
-    # Array to mark pixels visited - all values start set to false
-    visitedArray = np.zeros_like(thresholdedImage, dtype=bool)
-
+    visitedArray = np.zeros_like(thresholdedImage, dtype=bool) # Array to mark pixels visited - all values start set to false
     blobSizes = {}  # track the sizes of each blob found; key = blob ID / value = size
+    blobCoordinates = {}; #track coordinates of each blob
 
     # Adds neighboring pixels to existing blob
     def addPixel(new_i, new_j, blobID):
-
         blobSizes[blobID] = blobSizes.get(blobID,0) + 1
+        blobCoordinates.setdefault(blobID, []).append((new_i, new_j))
 
         # explores the 8 pixels around the one being explored
         for di in [-1, 0, 1]:
@@ -58,10 +57,10 @@ def countBlobs(thresholdedImage, minBlobSize):
                 blobID += 1
 
     filteredBlobSizes = {k: v for k, v in blobSizes.items() if v > minBlobSize}
-
+    filteredBlobCoordinates = {k: blobCoordinates[k] for k in filteredBlobSizes.keys()}
     largestBlobSize, largestBlobID = largestBlob(filteredBlobSizes)
 
-    return filteredBlobSizes, largestBlobSize, largestBlobID
+    return filteredBlobSizes, largestBlobSize, largestBlobID, filteredBlobCoordinates
 
 def blobStats(filteredBlobSizes):
     sizes = list(filteredBlobSizes.values())
@@ -74,7 +73,6 @@ def blobStats(filteredBlobSizes):
         median_size = np.median(sizes)
 
     return mean_size, median_size
-    #print blob id with stats
     #add range in both x and y directions
     #think of other stats to report
 
@@ -109,24 +107,44 @@ def export(data, filename):
         df.to_excel(filename, index=False)
 
 def process_image(image_path, threshold, minBlobSize, output_file):
+    image_name = os.path.basename(image_path)
+
     image = Image.open(image_path)
     imageArray = np.array(image)
 
     thresholdedImage = thresholdGreenPixels(imageArray, threshold)
 
-    blobDict, largestBlobSize, largestBlobID = countBlobs(thresholdedImage, minBlobSize)
+    blobDict, largestBlobSize, largestBlobID, blobCoordinates = countBlobs(thresholdedImage, minBlobSize)
 
     mean_size, median_size = blobStats(blobDict)
 
+    blobRanges = {}
+    for blobID, coordinates in blobCoordinates.items():
+        x_values = [coord[1] for coord in coordinates]
+        y_values = [coord[0] for coord in coordinates]
+        x_range = max(x_values) - min(x_values)
+        y_range = max(y_values) - min(y_values)
+        blobRanges[blobID] = {'X-Range': x_range, 'Y-Range': y_range}
+
+    #1 pixel is roughly 1.636 microns
+    pixel_to_micron = 1.636
+    blobAreas = {}
+    for blobID, size in blobDict.items():
+        area = size * (pixel_to_micron**2)
+        area_mm = area / (10**6)
+        blobAreas[blobID] = area_mm
+
     data = {
-        "Image Path": [image_path],
+        "Image Name": [image_name],
         "Threshold": [threshold],
         "Minimum Blob Size": [minBlobSize],
+        "Number of Blobs": [len(blobDict)],
+        "Blob Areas (mm^2)": [blobAreas],
         "Median Blob Size": [median_size],
         "Mean Blob Size": [mean_size],
         "Largest Blob Size": [largestBlobSize],
         "Largest Blob ID": [largestBlobID],
-        "Number of Blobs": [len(blobDict)]
+        "Blob Ranges": [blobRanges]
     }
 
     export(data, "output.xlsx")
@@ -149,6 +167,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
