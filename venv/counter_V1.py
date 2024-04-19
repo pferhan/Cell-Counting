@@ -5,6 +5,8 @@ from scipy import ndimage
 import sys
 import os
 
+sys.setrecursionlimit(2000)
+
 def thresholdGreenPixels(imageArray, threshold):
     greenChannel = imageArray[:, :, 1]
     thresholdedImage = np.where(greenChannel > threshold, 255, 0)
@@ -36,6 +38,8 @@ def countBlobs(thresholdedImage, minBlobSize):
         blobSizes[blobID] = blobSizes.get(blobID,0) + 1
         blobCoordinates.setdefault(blobID, []).append((new_i, new_j))
 
+        visitedArray[new_i, new_j] = True
+
         # explores the 8 pixels around the one being explored
         for di in [-1, 0, 1]:
             for dj in [-1, 0, 1]:
@@ -44,7 +48,6 @@ def countBlobs(thresholdedImage, minBlobSize):
 
                 if (0 <= new_i2 < visitedArray.shape[0] and 0 <= new_j2 < visitedArray.shape[1]):
                     if (not visitedArray[new_i2, new_j2] and thresholdedImage[new_i2, new_j2] == 255):
-                        visitedArray[new_i, new_j] = True
                         addPixel(new_i2, new_j2, blobID)
 
     # Covers whole array and adds pixels to blobs
@@ -134,36 +137,59 @@ def process_image(image_path, threshold, minBlobSize, output_file):
         area_mm = area / (10**6)
         blobAreas[blobID] = area_mm
 
+    ''' 
+    Print out actual images:
+
+    thresholdedImage_uint8 = thresholdedImage.astype(np.uint8)
+    Image.fromarray(thresholdedImage_uint8).show()
+
+    visualizeBlobs(thresholdedImage, blobDict, minBlobSize, imageArray)
+    '''
     data = {
         "Image Name": [image_name],
         "Threshold": [threshold],
         "Minimum Blob Size": [minBlobSize],
         "Number of Blobs": [len(blobDict)],
         "Blob Areas (mm^2)": [blobAreas],
-        "Median Blob Size": [median_size],
-        "Mean Blob Size": [mean_size],
-        "Largest Blob Size": [largestBlobSize],
+        "Median Blob Size (mm^2)": [median_size*pixel_to_micron/10**6],
+        "Mean Blob Size (mm^2)": [mean_size*pixel_to_micron/10**6],
+        "Largest Blob Size (mm^2)": [largestBlobSize*pixel_to_micron/10**6],
         "Largest Blob ID": [largestBlobID],
         "Blob Ranges": [blobRanges]
     }
 
     export(data, "output.xlsx")
 
+def count_directories(directory):
+    num_directories = sum(1 for _ in os.walk(directory)) - 1  # Subtract 1 to exclude the starting directory itself
+    return num_directories
+
 def process_directory(directory, threshold, minBlobSize, output_file):
     for root, dirs, files in os.walk(directory):
         for file in files:
-            if file.endswith(".tif"):
+            if file.endswith(".tif") and "RED" not in file.upper() and "GREEN" not in file.upper() and "BLUE" not in file.upper():
                 image_path = os.path.join(root, file)
                 process_image(image_path, threshold, minBlobSize, output_file)
 
 def main():
-    #directory = "/Users/hannahpfersch/Library/CloudStorage/OneDrive-QuinnipiacUniversity/Pfersch Black Ind Study SP24"
-    directory = "/Users/hannahpfersch/Documents/College/Senior/SP24/AutomatedCellCounter/venv/lib"
+    directory = "/Users/hannahpfersch/Library/CloudStorage/OneDrive-QuinnipiacUniversity/Pfersch Blake Ind Study SP24/RelA Immuno Images/MATSEP 01"
+    #directory = "/Users/hannahpfersch/Documents/College/Senior/SP24/CSC494/AutomatedCellCounter/venv/lib"
     threshold = int(input("What is the green threshold for neurons (0-255)?: " ))
     minBlobSize = int(input("Enter the minimum blob size: "))
     output_file = "output.xlsx"
 
-    process_directory(directory, threshold, minBlobSize, output_file)
+    num_directories = count_directories(directory)
+    print("Total number of directories to process: ", num_directories)
+
+    current_directory_num = 0
+
+    for root, dirs, files in os.walk(directory):
+        for directory in dirs:
+            current_directory_num += 1
+            print("Processing directory:", directory, "({}/{})".format(current_directory_num, num_directories))
+            directory_path = os.path.join(root, directory)
+            process_directory(directory_path, threshold, minBlobSize, output_file)
+    #process_directory(directory, threshold, minBlobSize, output_file)
 
 if __name__ == "__main__":
     main()
